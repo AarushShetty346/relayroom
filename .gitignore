@@ -8,3 +8,4 @@ coverage/
 .relayroom/
 .relayroom-worktrees/
 apps/web/dist/
+apps/web/.vite/
