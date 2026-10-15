@@ -28,7 +28,8 @@
     "demo:approvals": "tsx scripts/demo-approvals.ts",
     "start": "npm run start -w @relayroom/server",
     "smoke:task": "tsx scripts/smoke-task.ts",
-    "check:deny": "tsx scripts/check-deny-rules.ts"
+    "check:deny": "tsx scripts/check-deny-rules.ts",
+    "create-user": "tsx --env-file-if-exists=.env scripts/create-user.ts"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
