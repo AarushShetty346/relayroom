@@ -16,11 +16,12 @@ import {
   TransitionTaskBody,
   UpdateMemoryBody,
   UpdateTaskBody,
+  type ServerInfoDTO,
   type UserDTO,
 } from "@relayroom/protocol";
 import { and, asc, eq } from "drizzle-orm";
 import type { Ctx } from "../services/ctx.js";
-import { badRequest, notFound, unauthorized } from "../lib/errors.js";
+import { badRequest, forbidden, notFound, unauthorized } from "../lib/errors.js";
 import { SESSION_COOKIE } from "../lib/cookies.js";
 import * as auth from "../services/auth.js";
 import * as projects from "../services/projects.js";
@@ -62,6 +63,10 @@ const PageQuery = z.object({
 export function registerRoutes(app: FastifyInstance, ctx: Ctx): void {
   app.decorateRequest("user", null);
 
+  // Brute-force protection for sign-in and sign-up (per client IP; behind a proxy, trustProxy supplies it).
+  const perMinute = ctx.config.authRateLimitPerMinute ?? 0;
+  const authLimit = perMinute > 0 ? { config: { rateLimit: { max: perMinute, timeWindow: "1 minute" } } } : {};
+
   app.addHook("onRequest", async (req) => {
     req.user = await auth.userForSessionToken(ctx, req.cookies[SESSION_COOKIE]);
   });
@@ -82,14 +87,24 @@ export function registerRoutes(app: FastifyInstance, ctx: Ctx): void {
     });
 
   // ----- auth -----
-  app.post("/api/auth/signup", async (req, reply) => {
-    const body = parse(SignupBody, req.body);
-    const user = await auth.signup(ctx, body);
+  const signupMode = ctx.config.signupMode ?? "open";
+  app.get("/api/server-info", async (): Promise<ServerInfoDTO> => ({ signupMode }));
+
+  app.post("/api/auth/signup", authLimit, async (req, reply) => {
+    const { inviteCode, ...body } = parse(SignupBody, req.body);
+    let user: UserDTO;
+    if (signupMode === "invite") {
+      if (!inviteCode) throw forbidden("This server is invite-only. Ask a project owner for an invite code.");
+      user = await auth.signupWithInvite(ctx, body, inviteCode);
+    } else {
+      user = await auth.signup(ctx, body);
+      if (inviteCode) await projects.acceptInvite(ctx, user, inviteCode).catch(() => undefined);
+    }
     const s = await auth.createSession(ctx, user.id);
     setSession(reply, s.token, s.expiresAt);
     return reply.code(201).send({ user });
   });
-  app.post("/api/auth/login", async (req, reply) => {
+  app.post("/api/auth/login", authLimit, async (req, reply) => {
     const user = await auth.login(ctx, parse(LoginBody, req.body));
     const s = await auth.createSession(ctx, user.id);
     setSession(reply, s.token, s.expiresAt);

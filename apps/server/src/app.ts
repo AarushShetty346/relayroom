@@ -45,6 +45,10 @@ export async function buildServer(config: Config, dbh: DbHandle): Promise<RelayR
   const ctx: Ctx = { db: dbh.db, hub, log: app.log, config };
 
   await app.register(cookie);
+  if (config.authRateLimitPerMinute) {
+    // Only routes that opt in (sign-in/sign-up) are limited.
+    await app.register((await import("@fastify/rate-limit")).default, { global: false });
+  }
   await app.register(cors, { origin: config.webOrigins, credentials: true });
 
   // CSRF: browsers cannot attach a custom header cross-site without a CORS preflight we reject.
