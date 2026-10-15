@@ -129,36 +129,39 @@ export async function revokeInvite(ctx: Ctx, user: UserDTO, projectId: string, i
 
 export async function acceptInvite(ctx: Ctx, user: UserDTO, code: string): Promise<ProjectDTO> {
   const outbox = new Outbox();
-  const result = await ctx.db.transaction(async (tx) => {
-    // Atomically consume one use of a valid invite.
-    const [inv] = await tx
-      .update(invites)
-      .set({ uses: sql`${invites.uses} + 1` })
-      .where(
-        and(
-          eq(invites.codeHash, sha256(code)),
-          isNull(invites.revokedAt),
-          gt(invites.expiresAt, new Date()),
-          lt(invites.uses, invites.maxUses),
-        ),
-      )
-      .returning();
-    if (!inv) throw badRequest("This invitation is invalid, expired, or already used");
-    const inserted = await tx
-      .insert(projectMembers)
-      .values({ projectId: inv.projectId, userId: user.id, role: "member" })
-      .onConflictDoNothing()
-      .returning();
-    if (inserted.length === 0) {
-      // Already a member: do not burn the invite.
-      await tx.update(invites).set({ uses: sql`${invites.uses} - 1` }).where(eq(invites.id, inv.id));
-    } else {
-      await postSystemMessage(tx, outbox, inv.projectId, `${user.displayName} (@${user.username}) joined the project.`);
-    }
-    const [p] = await tx.select().from(projects).where(eq(projects.id, inv.projectId));
-    const role = await requireMember(tx, inv.projectId, user.id);
-    return projectDTO(p!, role);
-  });
+  const result = await ctx.db.transaction((tx) => joinWithInvite(tx, outbox, user, code));
   await outbox.flush(ctx);
   return result;
+}
+
+/** Consumes one use of a valid invite and adds the user to its project, inside the caller's transaction. */
+export async function joinWithInvite(tx: DbOrTx, outbox: Outbox, user: UserDTO, code: string): Promise<ProjectDTO> {
+  // Atomically consume one use of a valid invite.
+  const [inv] = await tx
+    .update(invites)
+    .set({ uses: sql`${invites.uses} + 1` })
+    .where(
+      and(
+        eq(invites.codeHash, sha256(code)),
+        isNull(invites.revokedAt),
+        gt(invites.expiresAt, new Date()),
+        lt(invites.uses, invites.maxUses),
+      ),
+    )
+    .returning();
+  if (!inv) throw badRequest("This invitation is invalid, expired, or already used");
+  const inserted = await tx
+    .insert(projectMembers)
+    .values({ projectId: inv.projectId, userId: user.id, role: "member" })
+    .onConflictDoNothing()
+    .returning();
+  if (inserted.length === 0) {
+    // Already a member: do not burn the invite.
+    await tx.update(invites).set({ uses: sql`${invites.uses} - 1` }).where(eq(invites.id, inv.id));
+  } else {
+    await postSystemMessage(tx, outbox, inv.projectId, `${user.displayName} (@${user.username}) joined the project.`);
+  }
+  const [p] = await tx.select().from(projects).where(eq(projects.id, inv.projectId));
+  const role = await requireMember(tx, inv.projectId, user.id);
+  return projectDTO(p!, role);
 }

@@ -13,6 +13,10 @@ const Env = z.object({
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   /** Serve the built web UI from this directory (production). */
   WEB_DIST: z.string().optional(),
+  /** `invite`: accounts can only be created with a project invite code (use this whenever the server is reachable from outside). */
+  SIGNUP_MODE: z.enum(["open", "invite"]).default("open"),
+  /** Sign-in/sign-up attempts allowed per client IP per minute. 0 disables the limit. */
+  AUTH_RATE_LIMIT: z.coerce.number().int().min(0).default(20),
 });
 
 export interface Config {
@@ -28,6 +32,10 @@ export interface Config {
   /** How long a running dispatch survives without its adapter before it is marked interrupted. */
   orphanGraceMs: number;
   sweepIntervalMs: number;
+  /** Default "open". */
+  signupMode?: "open" | "invite";
+  /** Auth attempts per IP per minute; undefined or 0 = no limit. */
+  authRateLimitPerMinute?: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -43,5 +51,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     sessionTtlMs: 14 * 24 * 3600_000,
     orphanGraceMs: 90_000,
     sweepIntervalMs: 15_000,
+    signupMode: e.SIGNUP_MODE,
+    authRateLimitPerMinute: e.AUTH_RATE_LIMIT,
   };
 }
