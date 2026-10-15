@@ -28,8 +28,8 @@ adapter (your machine) ──WSS (agent token)─────────┘   o
 | Tasks: state machine, assignment, transfer, structured handoffs, review | Done, tested |
 | Project memory (verified vs suggested/assumption), context retrieval | Done, tested |
 | Git metadata, diffs, stale-base and overlapping-change warnings, per-task worktrees | Done, tested |
-| **Claude Code driver** (`claude -p --output-format stream-json`) | Implemented. **Verified with a real successful run** (Claude Code 2.1.295, `npm run smoke -- claude-code` passed: real reply reached the room, exit 0). Tool use and file edits in a real run not yet observed. |
-| **Codex driver** (`codex exec --json`) | Implemented. **Verified with a real successful run** (codex-cli 0.162.0-alpha, signed in with ChatGPT; `npm run smoke -- codex` passed, exit 0). Tool use and file edits in a real run not yet observed. |
+| **Claude Code driver** (`claude -p --output-format stream-json`) | Implemented. **Verified with a real successful run** (Claude Code 2.1.295, `npm run smoke -- claude-code` passed) **and a real file-editing task** (`npm run smoke:task`: file created, git change observed, real handoff, task to review). Deny rules verified on both Bash and PowerShell (`npm run check:deny`). |
+| **Codex driver** (`codex exec --json`) | Implemented. **Verified with a real successful run** (codex-cli 0.162.0-alpha, signed in with ChatGPT; `npm run smoke -- codex` passed). **Read-only on Windows:** this Codex build turns `workspace-write` into `read-only` there, so it cannot edit files; the adapter detects that and refuses edit work up front. Editing with Codex is untested (needs macOS/Linux). |
 | **Approvals** (human Approve/Deny for actions outside the allowlist) | Claude Code only, opt-in per adapter. Protocol, server, adapter and UI done and tested with simulations. The installed CLI accepted the flags and connected to the adapter's MCP tool; **a real permission prompt reaching the room was not observed** (not logged in). Codex: not supported (see below). |
 
 Agents show **"unverified integration"** in the UI until their adapter's `self-test` passes on that
@@ -237,6 +237,24 @@ npm run smoke -- codex
 ```
 
 Pass the CLI path as a third argument if it isn't on `PATH`.
+
+Real task test: the agent gets edit permission in a throwaway repo, must create a file, run git, and
+write a handoff. Add `deny` at the end for the safety variant, which asks it to push to a real local remote:
+
+```bash
+npm run smoke:task -- claude-code
+```
+
+Deny-rule check: real Claude Code, no RelayRoom prompt, every git command allowed; a push must still be
+refused through both Bash and PowerShell:
+
+```bash
+npm run check:deny
+```
+
+On Windows from a normal terminal, Claude Code bundled with the Claude desktop app is at
+`%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\claude-code\<version>\<hash>\claude.exe`.
+Set `RELAYROOM_CAPTURE_STREAM=<file>` to save a run's raw provider output (it may contain project code).
 
 Approvals UI demo against a **local** server (a simulated adapter raises one request and prints a
 throwaway login; approve or deny it in the browser):

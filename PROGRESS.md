@@ -1,6 +1,6 @@
 # RelayRoom — Progress
 
-Last updated: 2026-10-15. Branch `feat/mvp`, pushed to the private GitHub repo; nothing merged into `main`.
+Last updated: 2026-10-15. Work happens on `feat/mvp` and is merged into `main` (the default branch) once tests pass.
 
 ## State
 
@@ -25,11 +25,35 @@ wasn't verified.
   `npm run smoke -- codex` passed from a normal PowerShell terminal: the adapter spawned codex-cli
   0.162.0-alpha.17.2 read-only (`-s read-only`), its reply `RELAYROOM_SMOKE_OK` reached the room,
   outcome succeeded, exit 0, ~9.9s. Same scope as the Claude run: a no-tool prompt.
+- **Real Claude Code task with file edits (2026-10-15, `npm run smoke:task -- claude-code <cli>`).** Edit
+  permission, task assigned through the API: Claude created the file with the exact content, ran git
+  commands, and ended with a valid `relayroom-handoff` block. The adapter observed the new file in git,
+  the task went `assigned → running → awaiting_review`, and the stored handoff had both observed and
+  reported parts. Passed.
+- **Real findings from that run, fixed:**
+  - On Windows, Claude Code runs shell commands with a `PowerShell` tool as well as `Bash`. The driver
+    only watched `Bash`, so commands went unobserved, and the always-deny rules were written only as
+    `Bash(...)`. Now both tools are watched, every deny rule is written for both, and allow rules are
+    mirrored. Captured real streams are committed as fixtures
+    (`packages/adapter/test/fixtures/claude-push-denied-{1,2}.real.jsonl`).
+  - Claude Code auto-approves read-only commands such as `git log` even when they are not on the
+    allowlist. That is Claude Code's own policy; the allowlist only governs commands that would prompt.
+- **Deny rules verified for real (`npm run check:deny -- <cli>`).** No RelayRoom prompt, every git command
+  allowed (`Bash(git:*)` + `PowerShell(git:*)`), a real local `origin`, Claude asked to push through Bash
+  and then through PowerShell: both were refused by Claude Code ("Permission to use … has been denied"),
+  both appeared in `permission_denials`, and `origin` was unchanged. With the RelayRoom prompt, Claude
+  also declines to push on its own (`npm run smoke:task -- claude-code <cli> deny`).
+- **Codex cannot edit files on this machine.** codex-cli 0.162.0-alpha on Windows turns
+  `-s workspace-write` (and `-c sandbox_mode=workspace-write`) into `sandbox: read-only`, as shown by its own
+  header and by `codex debug prompt-input`. Its Windows sandbox features are "removed"/"under
+  development" here. The Codex task test therefore failed honestly: Codex reported that it could not write,
+  and changed nothing. The adapter now detects this at startup without a model call, caps itself to
+  read-only, and reports `edit: false`; the room refuses edit work for that agent up front.
 - Note for this machine: the Claude desktop app is a Store (MSIX) app, so its bundled CLI is at
   `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\<version>\…\claude.exe`
   from a normal terminal; the `%APPDATA%\Claude\…` path only exists inside the app's sandbox.
 
-- Full test suite: **97 tests pass** on in-process PGlite (75 before approvals + 22 new). The earlier 75
+- Full test suite: **103 tests pass** on in-process PGlite. The earlier 75
   also passed on PostgreSQL 16 (Docker), with the concurrency-sensitive files passing 3 consecutive runs;
   the approvals tests were run on PGlite only.
 - Typecheck (`strict`, `noUncheckedIndexedAccess`) passes for all packages and scripts; production web build
@@ -88,13 +112,11 @@ Not verified:
 
 ## Not verified (honest gaps)
 
-1. **Tool use in real runs.** Both providers' success paths are verified only for a no-tool reply.
-   Tool-use events, shell commands, file edits, the `relayroom-handoff` block and permission denials are
-   still tested only with **constructed** stream fixtures and a scripted driver. Next: assign a logged-in
-   agent a task that reads and edits files.
-2. Whether `--permission-prompts none` denies (rather than errors on) a disallowed Bash call in edit mode
-   was not observed for real; denials are parsed from `result.permission_denials`.
-3. Codex's `workspace-write` sandbox on Windows was not exercised.
+1. **Codex editing files.** Not possible on this Windows machine (Codex itself only runs read-only here,
+   see above). Codex tool events (`command_execution`, `file_change`) are still tested only with
+   constructed fixtures. Needs a Mac/Linux machine, or Codex's Windows sandbox once it ships.
+2. Claude Code's human-in-the-loop approval prompt (`--permission-prompt-tool`) has still not been
+   observed calling the adapter for real (see "Approvals" above).
 4. Two humans on separate networks over HTTPS/WSS: designed for (outbound adapter connections, secure
    cookies, configurable origins) but only tested on localhost.
 5. Rendering of partial token-by-token output: not implemented. Progress is forwarded per event (assistant
