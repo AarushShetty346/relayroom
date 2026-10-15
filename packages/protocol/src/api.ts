@@ -10,7 +10,16 @@ export const SignupBody = z.object({
   username: Handle,
   displayName: z.string().trim().min(1).max(64),
   password: z.string().min(10).max(256),
+  /** Required when the server runs invite-only: a project invite code; the new account joins that project. */
+  inviteCode: z.string().trim().min(16).max(128).optional(),
 });
+
+export type SignupMode = "open" | "invite";
+
+/** Public, unauthenticated server settings the sign-in screen needs. */
+export interface ServerInfoDTO {
+  signupMode: SignupMode;
+}
 export const LoginBody = z.object({ username: z.string().min(1).max(64), password: z.string().min(1).max(256) });
 
 export interface UserDTO {

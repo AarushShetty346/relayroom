@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ProjectDTO, UserDTO } from "@relayroom/protocol";
+import type { ProjectDTO, ServerInfoDTO, SignupMode, UserDTO } from "@relayroom/protocol";
 import { get, post } from "./api";
 import { createSocket, useConnection, useWorkspace } from "./store";
 import { Icon, Logo, Modal, initials } from "./components/ui";
@@ -22,9 +22,16 @@ export function App() {
 
 function Auth({ onAuthed }: { onAuthed: (u: UserDTO) => void }) {
   const [mode, setMode] = useState<"login" | "signup">("login");
-  const [form, setForm] = useState({ username: "", displayName: "", password: "" });
+  const [form, setForm] = useState({ username: "", displayName: "", password: "", inviteCode: "" });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [signupMode, setSignupMode] = useState<SignupMode>("open");
+  useEffect(() => {
+    get<ServerInfoDTO>("/api/server-info")
+      .then((r) => setSignupMode(r.signupMode))
+      .catch(() => {});
+  }, []);
+  const inviteOnly = signupMode === "invite";
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
@@ -33,7 +40,12 @@ function Auth({ onAuthed }: { onAuthed: (u: UserDTO) => void }) {
       const r =
         mode === "login"
           ? await post("/api/auth/login", { username: form.username.trim().toLowerCase(), password: form.password })
-          : await post("/api/auth/signup", { username: form.username.trim().toLowerCase(), displayName: form.displayName.trim(), password: form.password });
+          : await post("/api/auth/signup", {
+              username: form.username.trim().toLowerCase(),
+              displayName: form.displayName.trim(),
+              password: form.password,
+              ...(form.inviteCode.trim() ? { inviteCode: form.inviteCode.trim() } : {}),
+            });
       onAuthed(r.user);
     } catch (e) {
       setErr((e as Error).message);
@@ -62,6 +74,12 @@ function Auth({ onAuthed }: { onAuthed: (u: UserDTO) => void }) {
           Username
           <input className="input" autoComplete="username" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} required />
         </label>
+        {mode === "signup" && inviteOnly && (
+          <label className="field">
+            Invite code <span className="faint">(from a project owner — this server is invite-only)</span>
+            <input className="input mono" placeholder="rr_inv_…" value={form.inviteCode} onChange={(e) => setForm({ ...form, inviteCode: e.target.value })} required />
+          </label>
+        )}
         {mode === "signup" && (
           <label className="field">
             Display name

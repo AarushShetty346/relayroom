@@ -4,6 +4,9 @@ import type { Ctx } from "./ctx.js";
 import { sessions, users } from "../db/schema.js";
 import { hashPassword, randomToken, sha256, verifyPassword } from "../lib/crypto.js";
 import { conflict, unauthorized } from "../lib/errors.js";
+import { isUniqueViolation } from "../lib/pg-errors.js";
+import { Outbox } from "./ctx.js";
+import { joinWithInvite } from "./projects.js";
 
 // Used to keep login timing similar for unknown usernames.
 let dummyHash: Promise<string> | null = null;
@@ -25,6 +28,35 @@ export async function signup(
   const u = rows[0];
   if (!u) throw conflict("That username is taken");
   return userDTO(u);
+}
+
+/**
+ * Invite-only sign-up: the account is created and joins the invite's project in one transaction, so an
+ * invalid, expired or used code creates nothing.
+ */
+export async function signupWithInvite(
+  ctx: Ctx,
+  input: { username: string; displayName: string; password: string },
+  code: string,
+): Promise<UserDTO> {
+  const passwordHash = await hashPassword(input.password);
+  const outbox = new Outbox();
+  try {
+    const user = await ctx.db.transaction(async (tx) => {
+      const [u] = await tx
+        .insert(users)
+        .values({ username: input.username, displayName: input.displayName, passwordHash })
+        .returning();
+      const dto = userDTO(u!);
+      await joinWithInvite(tx, outbox, dto, code);
+      return dto;
+    });
+    await outbox.flush(ctx);
+    return user;
+  } catch (err) {
+    if (isUniqueViolation(err)) throw conflict("That username is taken");
+    throw err;
+  }
 }
 
 export async function login(ctx: Ctx, input: { username: string; password: string }): Promise<UserDTO> {
