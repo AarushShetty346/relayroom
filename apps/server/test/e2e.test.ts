@@ -3,8 +3,9 @@
  * server → shared room. The provider itself is a SCRIPTED DRIVER (simulation): this proves the
  * RelayRoom pipeline, not Claude Code or Codex. Real-provider runs are covered by scripts/smoke-real-provider.ts.
  */
+import { removeTemp } from "./tmp.js";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -19,7 +20,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   await ts.stop();
-  for (const d of dirs) rmSync(d, { recursive: true, force: true });
+  for (const d of dirs) removeTemp(d);
 });
 
 const quietLog = { info() {}, warn() {}, error() {} };

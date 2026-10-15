@@ -1,4 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { removeTemp } from "./tmp.js";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -135,7 +136,7 @@ describe("Codex exec --json parser", () => {
  */
 describe("driver process handling (simulated CLI)", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "rr-fakecli-"));
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  afterAll(() => removeTemp(dir));
 
   function fakeCli(name: string, body: string): string {
     const js = path.join(dir, `${name}.mjs`);

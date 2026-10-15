@@ -7,8 +7,9 @@
  * prompt tool. Neither involves a real Claude Code process: that a real permission prompt reaches the
  * hook was not observed (the CLI on this machine is not logged in). See PROGRESS.md.
  */
+import { removeTemp } from "./tmp.js";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -31,7 +32,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   await ts.stop();
-  for (const d of dirs) rmSync(d, { recursive: true, force: true });
+  for (const d of dirs) removeTemp(d);
 });
 
 let n = 0;

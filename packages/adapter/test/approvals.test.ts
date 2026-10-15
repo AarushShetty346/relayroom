@@ -6,8 +6,9 @@
  * real approval server process the way Claude Code would. It does not prove Claude Code calls the
  * tool; that was not observable here because the installed CLI is not logged in (PROGRESS.md).
  */
+import { removeTemp } from "./tmp.js";
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
@@ -25,7 +26,7 @@ import {
 
 const dirs: string[] = [];
 afterAll(() => {
-  for (const d of dirs) rmSync(d, { recursive: true, force: true });
+  for (const d of dirs) removeTemp(d);
 });
 function tmp(): string {
   const d = realpathSync.native(mkdtempSync(path.join(tmpdir(), "rr-ap-")));
