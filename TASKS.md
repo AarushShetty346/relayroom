@@ -15,7 +15,7 @@ Status: `[x]` done and verified, `[!]` done with a stated verification gap, `[ ]
 
 ## P1 — Core differentiators
 
-- [!] P1.1 Codex driver via `codex exec --json` — real CLI runs end to end; success path unobserved (CLI not logged in)
+- [x] P1.1 Codex driver via `codex exec --json` — real successful run verified by `npm run smoke` (no-tool prompt; real tool use not yet observed)
 - [x] P1.2 Structured handoffs (observed vs reported), transfers carry the previous handoff
 - [x] P1.3 Project memory (verified / suggested / assumption) + bounded context retrieval
 - [x] P1.4 Git status, branch/commit, ahead/behind, diffs in handoffs

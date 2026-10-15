@@ -29,7 +29,7 @@ adapter (your machine) ──WSS (agent token)─────────┘   o
 | Project memory (verified vs suggested/assumption), context retrieval | Done, tested |
 | Git metadata, diffs, stale-base and overlapping-change warnings, per-task worktrees | Done, tested |
 | **Claude Code driver** (`claude -p --output-format stream-json`) | Implemented. **Verified with a real successful run** (Claude Code 2.1.295, `npm run smoke -- claude-code` passed: real reply reached the room, exit 0). Tool use and file edits in a real run not yet observed. |
-| **Codex driver** (`codex exec --json`) | Implemented. Run for real against codex-cli 0.162.0-alpha here: same result — **not logged in**, success path not observed. |
+| **Codex driver** (`codex exec --json`) | Implemented. **Verified with a real successful run** (codex-cli 0.162.0-alpha, signed in with ChatGPT; `npm run smoke -- codex` passed, exit 0). Tool use and file edits in a real run not yet observed. |
 | **Approvals** (human Approve/Deny for actions outside the allowlist) | Claude Code only, opt-in per adapter. Protocol, server, adapter and UI done and tested with simulations. The installed CLI accepted the flags and connected to the adapter's MCP tool; **a real permission prompt reaching the room was not observed** (not logged in). Codex: not supported (see below). |
 
 Agents show **"unverified integration"** in the UI until their adapter's `self-test` passes on that

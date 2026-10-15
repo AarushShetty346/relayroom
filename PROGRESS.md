@@ -5,8 +5,8 @@ Last updated: 2026-10-15. Branch `feat/mvp`, pushed to the private GitHub repo; 
 ## State
 
 P0 and P1 are implemented and tested. P2 items are partly done (see TASKS.md). The MVP definition of done
-is met for Claude Code: after logging in the CLI, `npm run smoke -- claude-code` passed (see below).
-Codex has still not completed a successful run here (its CLI is not logged in).
+is met for both providers: after logging in each CLI, `npm run smoke -- claude-code` and
+`npm run smoke -- codex` passed (see below).
 
 Human-in-the-loop approvals (Claude Code, opt-in per adapter) were added on 2026-10-15: protocol events,
 `approvals` table + migration `0001_approvals`, server service and routes, adapter MCP permission-prompt
@@ -21,6 +21,10 @@ wasn't verified.
   message, outcome succeeded, exit 0, ~5–6s. This covers the success path of message → dispatch → real
   CLI → stream parsing → reply in the room. It was a no-tool prompt, so tool use, edits and the handoff
   block are still unobserved (gap 1 below).
+- **Real Codex success run (2026-10-15).** With the Codex CLI logged in through ChatGPT (Go plan),
+  `npm run smoke -- codex` passed from a normal PowerShell terminal: the adapter spawned codex-cli
+  0.162.0-alpha.17.2 read-only (`-s read-only`), its reply `RELAYROOM_SMOKE_OK` reached the room,
+  outcome succeeded, exit 0, ~9.9s. Same scope as the Claude run: a no-tool prompt.
 - Note for this machine: the Claude desktop app is a Store (MSIX) app, so its bundled CLI is at
   `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\<version>\…\claude.exe`
   from a normal terminal; the `%APPDATA%\Claude\…` path only exists inside the app's sandbox.
@@ -84,11 +88,10 @@ Not verified:
 
 ## Not verified (honest gaps)
 
-1. **Tool use in real runs.** Claude Code's success path is verified only for a no-tool reply. Tool-use
-   events, Bash commands, file edits, the `relayroom-handoff` block and permission denials are still
-   tested only with **constructed** stream fixtures and a scripted driver. Next: mention a logged-in agent
-   with a task that reads and edits files. Codex: not logged in, no successful run yet (`codex login`,
-   then `npm run smoke -- codex`).
+1. **Tool use in real runs.** Both providers' success paths are verified only for a no-tool reply.
+   Tool-use events, shell commands, file edits, the `relayroom-handoff` block and permission denials are
+   still tested only with **constructed** stream fixtures and a scripted driver. Next: assign a logged-in
+   agent a task that reads and edits files.
 2. Whether `--permission-prompts none` denies (rather than errors on) a disallowed Bash call in edit mode
    was not observed for real; denials are parsed from `result.permission_denials`.
 3. Codex's `workspace-write` sandbox on Windows was not exercised.
