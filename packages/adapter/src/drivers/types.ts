@@ -50,6 +50,13 @@ export interface RunResult {
 export interface DetectResult {
   bin: string;
   version: string | null;
+  /**
+   * Whether the provider will actually grant file edits on this machine, when the driver can check
+   * without a model call. false = it only runs read-only here; null/undefined = not determined.
+   */
+  canEdit?: boolean | null;
+  /** Human-readable explanation when canEdit is false. */
+  editNote?: string;
 }
 
 /**

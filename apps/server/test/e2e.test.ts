@@ -200,6 +200,26 @@ describe("human → agent → human through the real adapter runtime", () => {
     r.socket.disconnect();
   });
 
+  it("a provider that can only run read-only on its machine is refused edit work up front", async () => {
+    const r = await room("edit");
+    const base = scriptedDriver(async () => ok("read-only answer"));
+    const driver = { ...base, prompts: base.prompts, detect: async () => ({ bin: "scripted", version: "scripted-1", canEdit: false, editNote: "sandbox is read-only here" }) };
+    const adapter = new Adapter(r.cfg, driver, quietLog);
+    await adapter.start();
+    const agent = await online(r.human, r.projectId);
+    expect(agent.maxPermission).toBe("read-only");
+    expect(agent.capabilities.edit).toBe(false);
+    const res = await r.human.post(`/api/projects/${r.projectId}/messages`, { body: "@claude edit the file", clientNonce: nonce(), permission: "edit" });
+    expect(res.body.unavailable[0].reason).toMatch(/can only run read-only/);
+    expect(driver.prompts).toHaveLength(0);
+    // Read-only work still runs.
+    await r.human.post(`/api/projects/${r.projectId}/messages`, { body: "@claude just look", clientNonce: nonce() });
+    await waitFor(() => r.seen.find((m) => m.kind === "agent"));
+    expect(driver.prompts).toHaveLength(1);
+    await adapter.stop();
+    r.socket.disconnect();
+  });
+
   it("allowedRequesters is enforced by the adapter even when the server allows the member", async () => {
     const r = await room("edit", { allowedRequesters: ["somebody-else"] });
     const driver = scriptedDriver(async () => ok("should not run"));
