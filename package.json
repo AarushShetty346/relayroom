@@ -26,7 +26,9 @@
     "seed": "tsx --env-file-if-exists=.env scripts/seed-dev.ts",
     "smoke": "tsx scripts/smoke-real-provider.ts",
     "demo:approvals": "tsx scripts/demo-approvals.ts",
-    "start": "npm run start -w @relayroom/server"
+    "start": "npm run start -w @relayroom/server",
+    "smoke:task": "tsx scripts/smoke-task.ts",
+    "check:deny": "tsx scripts/check-deny-rules.ts"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
