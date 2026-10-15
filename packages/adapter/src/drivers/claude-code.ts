@@ -1,6 +1,6 @@
 import type { ObservedCommand } from "@relayroom/protocol";
 import type { DetectResult, DriverEvent, ProviderDriver, RunOptions, RunResult } from "./types.js";
-import { runVersion, spawnCli, truncate, which } from "../proc.js";
+import { captureLine, runVersion, spawnCli, truncate, which } from "../proc.js";
 import { APPROVAL_TOOL_ID } from "../approval-policy.js";
 import { startApprovalBridge, type ApprovalBridge } from "../approval-bridge.js";
 
@@ -18,22 +18,40 @@ import { startApprovalBridge, type ApprovalBridge } from "../approval-bridge.js"
  * Never passes --dangerously-skip-permissions or bypassPermissions.
  */
 
-/** Shell commands that are never allowed, even if the user's own settings allow them. */
-const ALWAYS_DENIED = [
-  "Bash(git push:*)",
-  "Bash(git reset --hard:*)",
-  "Bash(git rebase:*)",
-  "Bash(git clean:*)",
-  "Bash(git checkout --:*)",
-  "Bash(git restore:*)",
-  "Bash(git merge:*)",
-  "Bash(git branch -D:*)",
-  "Bash(git filter-branch:*)",
-  "Bash(rm -rf:*)",
-  "Bash(npm publish:*)",
+/**
+ * Claude Code's shell tools. On Windows it runs commands through `PowerShell`, elsewhere `Bash`, so
+ * every shell permission rule is written for both.
+ */
+export const SHELL_TOOLS = ["Bash", "PowerShell"] as const;
+
+/** Shell commands that are never allowed, even if the user's own settings or allowlist allow them. */
+const ALWAYS_DENIED_COMMANDS = [
+  "git push:*",
+  "git reset --hard:*",
+  "git rebase:*",
+  "git clean:*",
+  "git checkout --:*",
+  "git restore:*",
+  "git merge:*",
+  "git branch -D:*",
+  "git filter-branch:*",
+  "rm -rf:*",
+  "npm publish:*",
 ];
+export const ALWAYS_DENIED = SHELL_TOOLS.flatMap((tool) => ALWAYS_DENIED_COMMANDS.map((c) => `${tool}(${c})`));
 
 export const DEFAULT_CLAUDE_ALLOWED_COMMANDS = ["Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)"];
+
+/** Users write allow rules as `Bash(...)`; mirror each shell rule to the other shell tool. */
+export function mirrorShellRules(rules: string[]): string[] {
+  const out = new Set<string>();
+  for (const r of rules) {
+    out.add(r);
+    const m = /^(Bash|PowerShell)\((.*)\)$/.exec(r);
+    if (m) for (const tool of SHELL_TOOLS) out.add(`${tool}(${m[2]})`);
+  }
+  return [...out];
+}
 
 export function claudeArgs(
   permission: "read-only" | "edit",
@@ -51,7 +69,7 @@ export function claudeArgs(
     args.push("--permission-mode", "default", "--tools", "Read,Grep,Glob");
   } else {
     args.push("--permission-mode", "acceptEdits");
-    if (allowedCommands.length) args.push("--allowedTools", allowedCommands.join(","));
+    if (allowedCommands.length) args.push("--allowedTools", mirrorShellRules(allowedCommands).join(","));
   }
   args.push("--disallowedTools", ALWAYS_DENIED.join(","));
   return args;
@@ -95,7 +113,7 @@ export class ClaudeStreamParser {
           } else if (block.type === "tool_use") {
             const name = String(block.name ?? "tool");
             const input = (block.input ?? {}) as Json;
-            if (name === "Bash" && typeof input.command === "string") {
+            if ((SHELL_TOOLS as readonly string[]).includes(name) && typeof input.command === "string") {
               this.pending.set(block.id, { name, command: input.command });
               out.push({ type: "command", text: `$ ${truncate(input.command, 1000)}` });
             } else if (["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(name)) {
@@ -121,7 +139,7 @@ export class ClaudeStreamParser {
           this.pending.delete(block.tool_use_id);
           if (p.command !== undefined) {
             // Claude Code reports error/success for tool results, not the numeric exit code.
-            this.commands.push({ command: truncate(p.command, 2000), exitCode: null, ok: !block.is_error, source: "claude-code:Bash" });
+            this.commands.push({ command: truncate(p.command, 2000), exitCode: null, ok: !block.is_error, source: `claude-code:${p.name}` });
           }
           if (block.is_error) {
             const text = typeof block.content === "string" ? block.content : JSON.stringify(block.content ?? "");
@@ -207,6 +225,7 @@ export function createClaudeDriver(opts: { bin?: string; allowedCommands?: strin
       try {
         for await (const line of proc.lines) {
           if (!line.trim()) continue;
+          captureLine(line);
           for (const ev of parser.feed(line)) o.onEvent(ev);
         }
         const { code } = await proc.exited;

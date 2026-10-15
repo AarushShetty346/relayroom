@@ -27,7 +27,7 @@ export function makeDriver(cfg: AdapterConfig): ProviderDriver {
   const dp = (p: string) => displayPath(cfg.projectDir, p);
   return cfg.provider === "claude-code"
     ? createClaudeDriver({ ...(cfg.providerBin ? { bin: cfg.providerBin } : {}), ...(cfg.allowedCommands ? { allowedCommands: cfg.allowedCommands } : {}), displayPath: dp })
-    : createCodexDriver({ ...(cfg.providerBin ? { bin: cfg.providerBin } : {}), displayPath: dp });
+    : createCodexDriver({ ...(cfg.providerBin ? { bin: cfg.providerBin } : {}), displayPath: dp, probeDir: cfg.projectDir });
 }
 
 async function main(): Promise<number> {
@@ -62,7 +62,9 @@ async function main(): Promise<number> {
           server: cfg.serverUrl,
           projectDir: cfg.projectDir,
           provider: cfg.provider,
-          providerCli: found ? { found: true, version: found.version } : { found: false },
+          providerCli: found
+            ? { found: true, version: found.version, canEdit: found.canEdit ?? "not determined", ...(found.editNote ? { note: found.editNote } : {}) }
+            : { found: false },
           selfTest: found ? (journal.selfTest(`${driver.id}@${found.version ?? "unknown"}`) ?? "not run") : "n/a",
           maxPermission: cfg.maxPermission,
           allowedRequesters: cfg.allowedRequesters ?? "all project members the server allows",

@@ -1,9 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { removeTemp } from "./tmp.js";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { ClaudeStreamParser, claudeArgs, createClaudeDriver } from "../src/drivers/claude-code.js";
-import { CodexStreamParser, codexArgs, createCodexDriver } from "../src/drivers/codex.js";
+import { ClaudeStreamParser, claudeArgs, createClaudeDriver, mirrorShellRules } from "../src/drivers/claude-code.js";
+import { CodexStreamParser, codexArgs, createCodexDriver, parseEffectiveSandbox } from "../src/drivers/codex.js";
 import type { DriverEvent } from "../src/drivers/types.js";
 
 const fixture = (name: string) => readFileSync(path.join(import.meta.dirname, "fixtures", name), "utf8").split("\n").filter(Boolean);
@@ -56,12 +57,41 @@ describe("Claude Code stream-json parser", () => {
     const ro = claudeArgs("read-only", []);
     expect(ro).toEqual(expect.arrayContaining(["-p", "--output-format", "stream-json", "--verbose", "--permission-prompts", "none", "--tools", "Read,Grep,Glob"]));
     const ed = claudeArgs("edit", ["Bash(npm test:*)"]);
-    expect(ed).toEqual(expect.arrayContaining(["--permission-mode", "acceptEdits", "--allowedTools", "Bash(npm test:*)"]));
+    // On Windows Claude Code runs shell commands through PowerShell, so allow rules are mirrored.
+    expect(ed).toEqual(expect.arrayContaining(["--permission-mode", "acceptEdits", "--allowedTools", "Bash(npm test:*),PowerShell(npm test:*)"]));
     for (const a of [ro, ed]) {
       expect(a.join(" ")).not.toMatch(/dangerously|bypassPermissions/);
-      expect(a[a.indexOf("--disallowedTools") + 1]).toContain("Bash(git push:*)");
+      const denied = a[a.indexOf("--disallowedTools") + 1]!.split(",");
+      for (const rule of ["git push:*", "git reset --hard:*", "rm -rf:*"]) {
+        expect(denied).toContain(`Bash(${rule})`);
+        expect(denied).toContain(`PowerShell(${rule})`);
+      }
     }
   });
+
+  it("mirrors shell allow rules across Bash and PowerShell, leaving other rules alone", () => {
+    expect(mirrorShellRules(["Bash(git:*)", "PowerShell(npm test:*)", "WebFetch"]).sort()).toEqual(
+      ["Bash(git:*)", "Bash(npm test:*)", "PowerShell(git:*)", "PowerShell(npm test:*)", "WebFetch"].sort(),
+    );
+  });
+
+  // Captured from Claude Code 2.1.295 on Windows with every git command allowed and no RelayRoom prompt:
+  // the push was refused by the always-deny rules, once through each shell tool.
+  for (const [n, tool] of [
+    [1, "Bash"],
+    [2, "PowerShell"],
+  ] as const) {
+    it(`REAL capture: git push through ${tool} is recorded as a failed command and a permission denial`, () => {
+      const p = new ClaudeStreamParser();
+      const events = fixture(`claude-push-denied-${n}.real.jsonl`).flatMap((l) => p.feed(l));
+      expect(p.isError).toBe(false);
+      expect(p.commands).toEqual([{ command: "git push origin main", exitCode: null, ok: false, source: `claude-code:${tool}` }]);
+      expect(p.permissionDenials).toEqual([`${tool}: git push origin main`]);
+      expect(events.some((e) => e.type === "command" && e.text === "$ git push origin main")).toBe(true);
+      expect(events.some((e) => e.type === "error" && e.text.includes("has been denied"))).toBe(true);
+      expect(p.reply().length).toBeGreaterThan(0);
+    });
+  }
 });
 
 describe("Codex exec --json parser", () => {
@@ -106,7 +136,7 @@ describe("Codex exec --json parser", () => {
  */
 describe("driver process handling (simulated CLI)", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "rr-fakecli-"));
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  afterAll(() => removeTemp(dir));
 
   function fakeCli(name: string, body: string): string {
     const js = path.join(dir, `${name}.mjs`);
@@ -166,5 +196,29 @@ describe("driver process handling (simulated CLI)", () => {
     const r = await createCodexDriver({ bin: path.join(dir, "does-not-exist") }).run({ ...base, prompt: "x", signal: new AbortController().signal, onEvent: () => {} });
     expect(r.outcome).toBe("failed");
     expect(r.errorMessage).toMatch(/not found/);
+  });
+
+  it("detects when Codex downgrades workspace-write to read-only", async () => {
+    // The permissions text matches what codex-cli 0.162.0-alpha renders on Windows (captured 2026-10-15).
+    const fake = (name: string, mode: string) =>
+      fakeCli(
+        name,
+        `const a = process.argv.slice(2);
+        if (a[0] === "--version") console.log("codex-cli 0.0.0-fake");
+        else if (a[0] === "debug" && a[1] === "prompt-input") console.log(JSON.stringify([{ text: "<permissions instructions>\\nFilesystem sandboxing defines which files can be read or written. \`sandbox_mode\` is \`${mode}\`: ..." }]));`,
+      );
+    const ro = await createCodexDriver({ bin: fake("codex-ro", "read-only") }).detect();
+    expect(ro).toMatchObject({ version: "codex-cli 0.0.0-fake", canEdit: false });
+    expect(ro?.editNote).toMatch(/read-only/);
+    expect((await createCodexDriver({ bin: fake("codex-ww", "workspace-write") }).detect())?.canEdit).toBe(true);
+  });
+});
+
+describe("Codex effective sandbox parsing", () => {
+  it("reads the mode from prompt-input text and returns null when absent", () => {
+    expect(parseEffectiveSandbox("... `sandbox_mode` is `read-only`: The sandbox only permits reading files.")).toBe("read-only");
+    expect(parseEffectiveSandbox("`sandbox_mode` is `workspace-write`")).toBe("workspace-write");
+    expect(parseEffectiveSandbox("nothing here")).toBeNull();
+    expect(parseEffectiveSandbox(null)).toBeNull();
   });
 });

@@ -62,6 +62,7 @@ export class Adapter {
   private redactor: Redactor;
   private agentName = "agent";
   private providerVersion: string | null = null;
+  private providerCanEdit: boolean | null = null;
   private stopped = false;
   /** Approval requests waiting for a human; re-sent after a reconnect (the server dedupes by id). */
   private pendingApprovals = new Map<string, PendingApproval>();
@@ -82,6 +83,11 @@ export class Adapter {
     return this.cfg.approvals === true && this.driver.capabilities.approvals === true;
   }
 
+  /** The adapter's real cap: its config, lowered when the provider itself only runs read-only here. */
+  get effectiveMaxPermission(): PermissionProfile {
+    return this.cfg.maxPermission === "edit" && this.providerCanEdit !== false ? "edit" : "read-only";
+  }
+
   get verified(): boolean {
     return this.journal.selfTest(`${this.driver.id}@${this.providerVersion ?? "unknown"}`)?.ok === true;
   }
@@ -90,6 +96,10 @@ export class Adapter {
     const found = await this.driver.detect();
     if (!found) this.log.warn(`${this.driver.label} CLI not found; dispatches will fail until it is installed`);
     this.providerVersion = found?.version ?? null;
+    this.providerCanEdit = found?.canEdit ?? null;
+    if (this.providerCanEdit === false && this.cfg.maxPermission === "edit") {
+      this.log.warn(`${found?.editNote ?? `${this.driver.label} cannot edit files on this machine`}. This adapter will accept read-only work only.`);
+    }
 
     const socket: AdapterSocket = io(this.cfg.serverUrl + ADAPTER_NAMESPACE, {
       auth: { token: this.cfg.token },
@@ -147,8 +157,13 @@ export class Adapter {
       adapterVersion: ADAPTER_VERSION,
       provider: this.driver.id,
       providerVersion: this.providerVersion,
-      capabilities: { ...this.driver.capabilities, verified: this.verified, approvals: this.approvalsEnabled },
-      maxPermission: this.cfg.maxPermission,
+      capabilities: {
+        ...this.driver.capabilities,
+        edit: this.driver.capabilities.edit && this.providerCanEdit !== false,
+        verified: this.verified,
+        approvals: this.approvalsEnabled,
+      },
+      maxPermission: this.effectiveMaxPermission,
       activeDispatchIds: this.current ? [this.current.dispatchId] : [],
       journaledDispatchIds: this.journal.accepted().slice(-1000),
       repo,
@@ -175,6 +190,8 @@ export class Adapter {
 
   /** Local policy runs before anything else. Returns a refusal reason or null. */
   private policyRefusal(p: DispatchPayload): string | null {
+    if (p.permission === "edit" && this.cfg.maxPermission === "edit" && this.providerCanEdit === false)
+      return `${this.driver.label} only runs read-only on this machine, so it cannot edit files`;
     if (p.permission === "edit" && this.cfg.maxPermission !== "edit") return "this adapter's local policy allows read-only work only";
     if (this.cfg.allowedRequesters && !this.cfg.allowedRequesters.includes(p.requestedBy.username.toLowerCase()))
       return `@${p.requestedBy.username} is not on this adapter's allowed requester list`;
@@ -239,7 +256,7 @@ export class Adapter {
       baseCommit = repo ? await headCommit(cwd) : null;
       emit("status", `Starting ${this.driver.label} (${p.permission})`);
       // Local cap: the effective permission never exceeds this adapter's own maximum.
-      const effective: PermissionProfile = p.permission === "edit" && this.cfg.maxPermission === "edit" ? "edit" : "read-only";
+      const effective: PermissionProfile = p.permission === "edit" && this.effectiveMaxPermission === "edit" ? "edit" : "read-only";
       const runCwd = cwd;
       const approvals =
         this.approvalsEnabled && effective === "edit"

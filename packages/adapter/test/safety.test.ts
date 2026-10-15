@@ -1,5 +1,6 @@
+import { removeTemp } from "./tmp.js";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -18,7 +19,7 @@ function tmp(): string {
   return validateProjectDir(d);
 }
 afterAll(() => {
-  for (const d of tmpRoots) rmSync(d, { recursive: true, force: true });
+  for (const d of tmpRoots) removeTemp(d);
 });
 
 const gitc = (cwd: string, ...args: string[]) =>

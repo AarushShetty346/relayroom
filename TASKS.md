@@ -8,14 +8,14 @@ Status: `[x]` done and verified, `[!]` done with a stated verification gap, `[ ]
 - [x] P0.2 Accounts, sessions, projects, invitations, membership enforcement on every route and socket room
 - [x] P0.3 Durable real-time chat: persistence, broadcast, seq pagination, replies, mentions, nonce dedupe, reconnect catch-up
 - [x] P0.4 Agent registry, scoped revocable/rotatable tokens, adapter protocol (hello/heartbeat/dispatch/accept/events/complete/cancel)
-- [x] P0.5 Claude Code integration via `claude -p --output-format stream-json` — real successful run verified by `npm run smoke` (no-tool prompt; real tool use not yet observed)
+- [x] P0.5 Claude Code integration via `claude -p --output-format stream-json` — real runs verified: reply, file-editing task with handoff, deny rules on Bash and PowerShell
 - [x] P0.6 Dispatch, agent replies in the room, execution status, run cards
 - [x] P0.7 E2E: human message → real adapter runtime → reply in room (scripted driver) + real-CLI runs in the live stack + `npm run smoke`
 - [x] P0.8 README with local run instructions
 
 ## P1 — Core differentiators
 
-- [x] P1.1 Codex driver via `codex exec --json` — real successful run verified by `npm run smoke` (no-tool prompt; real tool use not yet observed)
+- [!] P1.1 Codex driver via `codex exec --json` — real read-only run verified; editing impossible on Windows (Codex downgrades its sandbox), detected and refused up front
 - [x] P1.2 Structured handoffs (observed vs reported), transfers carry the previous handoff
 - [x] P1.3 Project memory (verified / suggested / assumption) + bounded context retrieval
 - [x] P1.4 Git status, branch/commit, ahead/behind, diffs in handoffs

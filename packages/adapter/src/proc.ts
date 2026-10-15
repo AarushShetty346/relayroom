@@ -1,5 +1,5 @@
 import { spawn, execFile, type ChildProcess } from "node:child_process";
-import { accessSync, constants, statSync } from "node:fs";
+import { accessSync, appendFileSync, constants, statSync } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline";
 
@@ -99,6 +99,36 @@ export function runVersion(bin: string, args: string[]): Promise<string | null> 
   });
 }
 
+/** Runs a CLI to completion and returns its full stdout, or null on failure/timeout. */
+export function runCapture(bin: string, args: string[], opts: { cwd?: string; timeoutMs?: number } = {}): Promise<string | null> {
+  return new Promise((resolve) => {
+    const isShim = process.platform === "win32" && /\.(cmd|bat)$/i.test(bin);
+    const [file, fargs] = isShim
+      ? [process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", [bin, ...args].map(quoteWin).join(" ")]]
+      : [bin, args];
+    execFile(
+      file,
+      fargs,
+      { cwd: opts.cwd, timeout: opts.timeoutMs ?? 30_000, windowsHide: true, windowsVerbatimArguments: isShim, maxBuffer: 8 * 1024 * 1024 },
+      (err, stdout) => resolve(err ? null : stdout),
+    );
+  });
+}
+
 export function truncate(s: string, n: number): string {
   return s.length <= n ? s : s.slice(0, n - 1) + "…";
+}
+
+/**
+ * Debugging aid: when RELAYROOM_CAPTURE_STREAM names a file, every raw provider JSON line is appended
+ * to it (used to turn real runs into test fixtures). Off by default; the file may contain project code.
+ */
+export function captureLine(line: string): void {
+  const file = process.env.RELAYROOM_CAPTURE_STREAM;
+  if (!file) return;
+  try {
+    appendFileSync(file, line + "\n");
+  } catch {
+    // capture is best effort
+  }
 }

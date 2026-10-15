@@ -45,6 +45,8 @@ export async function agentAvailability(
   if (a.revokedAt) return "its credential has been revoked";
   if (a.acceptFrom === "owner" && a.ownerId !== requester.id) return "it only accepts instructions from its owner";
   if (!isAgentOnline(ctx, a)) return "its local adapter is offline";
+  if (permission === "edit" && a.capabilities && a.capabilities.edit === false)
+    return "its coding agent can only run read-only on its owner's machine";
   if (permission === "edit" && a.maxPermission === "read-only")
     return "its owner's local policy allows read-only work only";
   return null;

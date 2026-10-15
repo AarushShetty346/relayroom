@@ -3,8 +3,9 @@
  * server → shared room. The provider itself is a SCRIPTED DRIVER (simulation): this proves the
  * RelayRoom pipeline, not Claude Code or Codex. Real-provider runs are covered by scripts/smoke-real-provider.ts.
  */
+import { removeTemp } from "./tmp.js";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -19,7 +20,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   await ts.stop();
-  for (const d of dirs) rmSync(d, { recursive: true, force: true });
+  for (const d of dirs) removeTemp(d);
 });
 
 const quietLog = { info() {}, warn() {}, error() {} };
@@ -196,6 +197,26 @@ describe("human → agent → human through the real adapter runtime", () => {
     const res = await r.human.post(`/api/projects/${r.projectId}/messages`, { body: "@claude rewrite everything", clientNonce: nonce(), permission: "edit" });
     expect(res.body.unavailable[0].reason).toMatch(/read-only/);
     expect(driver.prompts).toHaveLength(0);
+    await adapter.stop();
+    r.socket.disconnect();
+  });
+
+  it("a provider that can only run read-only on its machine is refused edit work up front", async () => {
+    const r = await room("edit");
+    const base = scriptedDriver(async () => ok("read-only answer"));
+    const driver = { ...base, prompts: base.prompts, detect: async () => ({ bin: "scripted", version: "scripted-1", canEdit: false, editNote: "sandbox is read-only here" }) };
+    const adapter = new Adapter(r.cfg, driver, quietLog);
+    await adapter.start();
+    const agent = await online(r.human, r.projectId);
+    expect(agent.maxPermission).toBe("read-only");
+    expect(agent.capabilities.edit).toBe(false);
+    const res = await r.human.post(`/api/projects/${r.projectId}/messages`, { body: "@claude edit the file", clientNonce: nonce(), permission: "edit" });
+    expect(res.body.unavailable[0].reason).toMatch(/can only run read-only/);
+    expect(driver.prompts).toHaveLength(0);
+    // Read-only work still runs.
+    await r.human.post(`/api/projects/${r.projectId}/messages`, { body: "@claude just look", clientNonce: nonce() });
+    await waitFor(() => r.seen.find((m) => m.kind === "agent"));
+    expect(driver.prompts).toHaveLength(1);
     await adapter.stop();
     r.socket.disconnect();
   });

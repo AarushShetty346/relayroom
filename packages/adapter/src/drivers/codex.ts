@@ -1,6 +1,6 @@
 import type { ObservedCommand } from "@relayroom/protocol";
 import type { DetectResult, DriverEvent, ProviderDriver, RunOptions, RunResult } from "./types.js";
-import { runVersion, spawnCli, truncate, which } from "../proc.js";
+import { captureLine, runCapture, runVersion, spawnCli, truncate, which } from "../proc.js";
 
 /**
  * OpenAI Codex via its documented non-interactive mode:
@@ -113,7 +113,17 @@ export class CodexStreamParser {
   }
 }
 
-export function createCodexDriver(opts: { bin?: string; displayPath?: (p: string) => string } = {}): ProviderDriver {
+/**
+ * Reads the sandbox mode Codex will really apply, from `codex debug prompt-input` (renders the
+ * model-visible prompt without calling a model). Best effort: returns null if the text is not found.
+ */
+export function parseEffectiveSandbox(promptInput: string | null): "read-only" | "workspace-write" | "danger-full-access" | null {
+  const m = promptInput ? /`sandbox_mode` is `([a-z-]+)`/.exec(promptInput) : null;
+  const mode = m?.[1];
+  return mode === "read-only" || mode === "workspace-write" || mode === "danger-full-access" ? mode : null;
+}
+
+export function createCodexDriver(opts: { bin?: string; displayPath?: (p: string) => string; probeDir?: string } = {}): ProviderDriver {
   let resolvedBin: string | null = null;
   return {
     id: "codex",
@@ -124,7 +134,21 @@ export function createCodexDriver(opts: { bin?: string; displayPath?: (p: string
     async detect(): Promise<DetectResult | null> {
       resolvedBin = which(opts.bin ?? "codex");
       if (!resolvedBin) return null;
-      return { bin: resolvedBin, version: await runVersion(resolvedBin, ["--version"]) };
+      const version = await runVersion(resolvedBin, ["--version"]);
+      const sandbox = parseEffectiveSandbox(
+        await runCapture(resolvedBin, ["debug", "prompt-input", "-c", "sandbox_mode=workspace-write", "-c", "approval_policy=never", "probe"], {
+          ...(opts.probeDir ? { cwd: opts.probeDir } : {}),
+        }),
+      );
+      if (sandbox === "read-only") {
+        return {
+          bin: resolvedBin,
+          version,
+          canEdit: false,
+          editNote: "Codex downgrades the workspace-write sandbox to read-only on this machine (its own sandbox for this OS is not available)",
+        };
+      }
+      return { bin: resolvedBin, version, canEdit: sandbox === "workspace-write" ? true : null };
     },
     async run(o: RunOptions): Promise<RunResult> {
       const bin = resolvedBin ?? which(opts.bin ?? "codex");
@@ -155,6 +179,7 @@ export function createCodexDriver(opts: { bin?: string; displayPath?: (p: string
       try {
         for await (const line of proc.lines) {
           if (!line.trim()) continue;
+          captureLine(line);
           for (const ev of parser.feed(line)) o.onEvent(ev);
         }
         const { code } = await proc.exited;
