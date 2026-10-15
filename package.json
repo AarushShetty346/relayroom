@@ -1,0 +1,38 @@
+{
+  "name": "relayroom",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/protocol",
+    "packages/adapter",
+    "apps/server",
+    "apps/web"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:generate": "npm run db:generate -w @relayroom/server",
+    "db:migrate": "npm run db:migrate -w @relayroom/server",
+    "dev:server": "npm run dev -w @relayroom/server",
+    "dev:web": "npm run dev -w @relayroom/web",
+    "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "adapter": "npm run start -w @relayroom/adapter --",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p tsconfig.json",
+    "test": "vitest run",
+    "build:web": "npm run build -w @relayroom/web",
+    "seed": "tsx --env-file-if-exists=.env scripts/seed-dev.ts",
+    "smoke": "tsx scripts/smoke-real-provider.ts",
+    "demo:approvals": "tsx scripts/demo-approvals.ts",
+    "start": "npm run start -w @relayroom/server"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "concurrently": "9.2.5",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}
