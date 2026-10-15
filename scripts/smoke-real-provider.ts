@@ -108,6 +108,11 @@ try {
   await adapter?.stop();
   await server.close();
   await dbh.close();
-  rmSync(work, { recursive: true, force: true });
+  // Windows can keep the folder locked briefly after the provider exits; cleanup must not change the result.
+  try {
+    rmSync(work, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+  } catch {
+    console.warn(`Could not remove the temp folder ${work}; delete it manually if you like.`);
+  }
   process.exit(code);
 }

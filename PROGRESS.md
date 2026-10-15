@@ -1,12 +1,12 @@
 # RelayRoom — Progress
 
-Last updated: 2026-10-15. Branch `feat/mvp` (local only; nothing pushed, nothing merged into `main`).
+Last updated: 2026-10-15. Branch `feat/mvp`, pushed to the private GitHub repo; nothing merged into `main`.
 
 ## State
 
 P0 and P1 are implemented and tested. P2 items are partly done (see TASKS.md). The MVP definition of done
-is met **except** that no provider has completed a successful run here, because neither CLI on this
-machine is logged in (details below).
+is met for Claude Code: after logging in the CLI, `npm run smoke -- claude-code` passed (see below).
+Codex has still not completed a successful run here (its CLI is not logged in).
 
 Human-in-the-loop approvals (Claude Code, opt-in per adapter) were added on 2026-10-15: protocol events,
 `approvals` table + migration `0001_approvals`, server service and routes, adapter MCP permission-prompt
@@ -14,6 +14,16 @@ bridge with a local cap, and an Approve/Deny card on the run. See "Approvals" be
 wasn't verified.
 
 ## Verified on this machine
+
+- **Real Claude Code success run (2026-10-15).** With the Claude CLI logged in, `npm run smoke --
+  claude-code` passed twice from a normal PowerShell terminal: the real adapter spawned Claude Code 2.1.295
+  (`claude-opus-5-5`) read-only, its reply `RELAYROOM_SMOKE_OK` reached the shared room as an agent
+  message, outcome succeeded, exit 0, ~5–6s. This covers the success path of message → dispatch → real
+  CLI → stream parsing → reply in the room. It was a no-tool prompt, so tool use, edits and the handoff
+  block are still unobserved (gap 1 below).
+- Note for this machine: the Claude desktop app is a Store (MSIX) app, so its bundled CLI is at
+  `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\<version>\…\claude.exe`
+  from a normal terminal; the `%APPDATA%\Claude\…` path only exists inside the app's sandbox.
 
 - Full test suite: **97 tests pass** on in-process PGlite (75 before approvals + 22 new). The earlier 75
   also passed on PostgreSQL 16 (Docker), with the concurrency-sensitive files passing 3 consecutive runs;
@@ -74,12 +84,11 @@ Not verified:
 
 ## Not verified (honest gaps)
 
-1. **Successful provider runs.** Neither Claude Code nor Codex is logged in as a standalone CLI here (the
-   desktop apps' sessions are not available to a separate CLI process, and I did not try to work around
-   that). Therefore: tool-use events, Bash commands, file edits, the `relayroom-handoff` block, and
-   permission denials have only been tested with **constructed** stream fixtures based on the documented
-   formats, plus a scripted driver. To close this gap: log in (`claude auth login` / `codex login`), then
-   run `npm run smoke -- claude-code` and `npm run smoke -- codex`, then `adapter self-test`.
+1. **Tool use in real runs.** Claude Code's success path is verified only for a no-tool reply. Tool-use
+   events, Bash commands, file edits, the `relayroom-handoff` block and permission denials are still
+   tested only with **constructed** stream fixtures and a scripted driver. Next: mention a logged-in agent
+   with a task that reads and edits files. Codex: not logged in, no successful run yet (`codex login`,
+   then `npm run smoke -- codex`).
 2. Whether `--permission-prompts none` denies (rather than errors on) a disallowed Bash call in edit mode
    was not observed for real; denials are parsed from `result.permission_denials`.
 3. Codex's `workspace-write` sandbox on Windows was not exercised.

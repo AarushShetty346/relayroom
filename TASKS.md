@@ -8,7 +8,7 @@ Status: `[x]` done and verified, `[!]` done with a stated verification gap, `[ ]
 - [x] P0.2 Accounts, sessions, projects, invitations, membership enforcement on every route and socket room
 - [x] P0.3 Durable real-time chat: persistence, broadcast, seq pagination, replies, mentions, nonce dedupe, reconnect catch-up
 - [x] P0.4 Agent registry, scoped revocable/rotatable tokens, adapter protocol (hello/heartbeat/dispatch/accept/events/complete/cancel)
-- [!] P0.5 Claude Code integration via `claude -p --output-format stream-json` — real CLI runs end to end; success path unobserved (CLI not logged in)
+- [x] P0.5 Claude Code integration via `claude -p --output-format stream-json` — real successful run verified by `npm run smoke` (no-tool prompt; real tool use not yet observed)
 - [x] P0.6 Dispatch, agent replies in the room, execution status, run cards
 - [x] P0.7 E2E: human message → real adapter runtime → reply in room (scripted driver) + real-CLI runs in the live stack + `npm run smoke`
 - [x] P0.8 README with local run instructions
