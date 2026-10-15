@@ -1,0 +1,22 @@
+{
+  "name": "@relayroom/adapter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "relayroom-adapter": "./bin/relayroom-adapter.js"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "tsx src/cli.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@relayroom/protocol": "0.1.0",
+    "socket.io-client": "4.8.4",
+    "tsx": "4.23.15",
+    "zod": "4.6.7"
+  }
+}
