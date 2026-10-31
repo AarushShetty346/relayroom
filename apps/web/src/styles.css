@@ -166,6 +166,12 @@ label.field { display: grid; gap: 4px; font-size: 12px; color: var(--text-2); }
 .msg-text { white-space: pre-wrap; word-wrap: break-word; overflow-wrap: anywhere; }
 .msg-text code { background: var(--panel-3); padding: 1px 4px; border-radius: 4px; }
 .msg-text pre { background: var(--panel); border: 1px solid var(--border); padding: 10px; border-radius: 6px; overflow-x: auto; white-space: pre; }
+.msg-text > * { margin: 0; }
+.msg-text > * + * { margin-top: 6px; }
+.msg-text ul, .msg-text ol { padding-left: 22px; }
+.msg-text li + li { margin-top: 2px; }
+.msg-text .md-h { font-weight: 600; }
+.msg-text a { color: var(--accent); text-decoration: underline; }
 .mention { color: var(--accent); background: var(--accent-dim); border-radius: 4px; padding: 0 3px; font-weight: 500; }
 .mention.agent { color: var(--agent); background: var(--agent-dim); }
 .msg-actions {
