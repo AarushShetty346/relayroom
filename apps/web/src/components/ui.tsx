@@ -130,35 +130,112 @@ export function duration(ms: number | undefined | null): string {
 }
 
 /**
- * Renders message text safely (React escapes everything): ``` fences, `code`, and @mentions.
+ * Renders message text safely (React escapes everything, no raw HTML): ``` fences, a small Markdown subset
+ * (paragraphs, - / 1. lists, # headings, **bold**, *italic*, `code`, [links](https://…)) and @mentions.
+ * Agents write Markdown, so without this their replies showed literal asterisks.
  * Mentions are highlighted only when they resolve to a known agent or member handle.
  */
 export function RichText({ text, agentHandles, userHandles }: { text: string; agentHandles: Set<string>; userHandles: Set<string> }) {
-  const blocks = text.split(/```(?:[\w-]*)\n?([\s\S]*?)```/g);
+  const parts = text.split(/```(?:[\w-]*)\n?([\s\S]*?)```/g);
   return (
     <div className="msg-text">
-      {blocks.map((b, i) =>
+      {parts.map((b, i) =>
         i % 2 === 1 ? (
           <pre key={i}>
             <code>{b.replace(/\n$/, "")}</code>
           </pre>
         ) : (
-          <Fragment key={i}>{inline(b, agentHandles, userHandles)}</Fragment>
+          <Fragment key={i}>{blocks(b, agentHandles, userHandles)}</Fragment>
         ),
       )}
     </div>
   );
 }
 
+const LIST_ITEM = /^\s{0,3}(?:([-*+•])|(\d{1,3})[.)])\s+(.*)$/;
+const HEADING = /^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$/;
+
+/** Splits text (outside code fences) into paragraphs, lists and headings. */
+function blocks(text: string, agents: Set<string>, users: Set<string>): ReactNode[] {
+  const out: ReactNode[] = [];
+  let para: string[] = [];
+  let list: { ordered: boolean; start: number; items: string[] } | null = null;
+  const flushPara = () => {
+    if (para.length) out.push(<p key={out.length}>{inline(para.join("\n"), agents, users)}</p>);
+    para = [];
+  };
+  const flushList = () => {
+    if (!list) return;
+    const items = list.items.map((it, j) => <li key={j}>{inline(it, agents, users)}</li>);
+    out.push(list.ordered ? <ol key={out.length} start={list.start}>{items}</ol> : <ul key={out.length}>{items}</ul>);
+    list = null;
+  };
+  for (const line of text.replace(/^\n+|\n+$/g, "").split("\n")) {
+    if (!line.trim()) {
+      flushPara();
+      flushList();
+      continue;
+    }
+    const li = LIST_ITEM.exec(line);
+    if (li) {
+      flushPara();
+      const ordered = li[2] !== undefined;
+      if (!list || list.ordered !== ordered) {
+        flushList();
+        list = { ordered, start: ordered ? Number(li[2]) : 1, items: [] };
+      }
+      list.items.push(li[3]!);
+      continue;
+    }
+    const h = HEADING.exec(line);
+    if (h) {
+      flushPara();
+      flushList();
+      out.push(<p key={out.length} className="md-h">{inline(h[1]!, agents, users)}</p>);
+      continue;
+    }
+    // An indented line right after a list item continues that item.
+    if (list && /^\s{2,}\S/.test(line)) {
+      const l: { items: string[] } = list;
+      l.items[l.items.length - 1] += "\n" + line.trim();
+      continue;
+    }
+    flushList();
+    para.push(line);
+  }
+  flushPara();
+  flushList();
+  return out;
+}
+
+const INLINE = new RegExp(
+  [
+    /(?<code>`[^`\n]+`)/.source,
+    /(?<link>\[(?<linkText>[^\]\n]+)\]\((?<href>https?:\/\/[^\s)]+)\))/.source,
+    /(?<bold>\*\*(?=\S)(?<boldText>[^\n]+?)(?<=\S)\*\*)/.source,
+    /(?<italic>(?<![\w*])\*(?=[^\s*])(?<italicText>[^*\n]+?)(?<=\S)\*(?![\w*]))/.source,
+    /(?<mention>(?:^|(?<=[\s(\[{,;:!?"']))@[A-Za-z][A-Za-z0-9_-]+)/.source,
+  ].join("|"),
+  "g",
+);
+
 function inline(text: string, agents: Set<string>, users: Set<string>): ReactNode[] {
   const out: ReactNode[] = [];
-  const re = /(`[^`\n]+`)|((?:^|(?<=[\s(\[{,;:!?"']))@[A-Za-z][A-Za-z0-9_-]+)/g;
   let last = 0;
   let k = 0;
-  for (const m of text.matchAll(re)) {
+  for (const m of text.matchAll(INLINE)) {
     if (m.index! > last) out.push(text.slice(last, m.index));
+    const g = m.groups!;
     const tok = m[0];
-    if (tok.startsWith("`")) out.push(<code key={k++}>{tok.slice(1, -1)}</code>);
+    if (g.code) out.push(<code key={k++}>{tok.slice(1, -1)}</code>);
+    else if (g.link)
+      out.push(
+        <a key={k++} href={g.href} target="_blank" rel="noopener noreferrer">
+          {g.linkText}
+        </a>,
+      );
+    else if (g.bold) out.push(<strong key={k++}>{inline(g.boldText!, agents, users)}</strong>);
+    else if (g.italic) out.push(<em key={k++}>{inline(g.italicText!, agents, users)}</em>);
     else {
       const h = tok.slice(1).toLowerCase();
       if (agents.has(h)) out.push(<span key={k++} className="mention agent">{tok}</span>);
