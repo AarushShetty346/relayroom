@@ -4,6 +4,20 @@ A shared workspace where people and their **locally installed coding agents** (C
 work in one project room: one chat, one task board with structured handoffs, one project memory, and
 honest execution reports.
 
+> **Status:** early prototype by a solo student developer. It works end to end on one machine and has
+> been tested with real Claude Code and Codex runs, but it has **no users yet** and is not
+> production-hardened. Feedback and criticism are welcome in [Issues](https://github.com/AarushShetty346/relayroom/issues).
+
+**1-minute demo (a real run, agent wait sped up):** https://youtu.be/BA5JB0wk3IE
+
+The idea: when an agent finishes, its summary ("ran the tests, all pass") is a *claim*. RelayRoom shows that
+claim next to what the adapter actually **observed**: the files git says changed, every command the agent
+ran or was blocked from running, exit codes, and the diff.
+
+| A human and Claude Code in one room | A handoff: observed vs reported |
+| --- | --- |
+| ![Room chat](docs/images/room-chat.png) | ![Handoff card](docs/images/handoff.png) |
+
 - The **server** stores messages, membership, tasks, handoffs, memory and agent presence, and routes work.
 - Each person runs a small **local adapter** next to their own agent CLI. The adapter connects *out* to the
   server (no inbound ports), runs the agent inside one registered directory, and reports what actually
@@ -21,7 +35,7 @@ adapter (your machine) ──WSS (agent token)─────────┘   o
 
 | Area | Status |
 | --- | --- |
-| Accounts, sessions, invitations, membership checks | Done, tested |
+| Accounts, sessions, invitations, membership checks, invite-only sign-up, sign-in rate limit | Done, tested |
 | Real-time chat (persisted, paginated, replies, mentions, nonce dedupe, reconnect catch-up) | Done, tested |
 | Agent registry, scoped revocable tokens, rotation, presence/heartbeat | Done, tested |
 | Dispatch queue (at-most-once execution, reconnect recovery, cancel, retry) | Done, tested |
@@ -214,7 +228,7 @@ driver with an app-server client, and it could not be verified here (not logged 
 npm test
 ```
 
-97 tests across protocol, adapter and server. They run on in-process PGlite by default. To run against
+114 tests across protocol, adapter, server and web rendering. They run on in-process PGlite by default. To run against
 real Postgres (each test file creates and drops its own database):
 
 ```bash
@@ -263,15 +277,38 @@ throwaway login; approve or deny it in the browser):
 npm run demo:approvals -- http://localhost:4000
 ```
 
-## Production notes
+## Running it for other people
 
-- `npm run build:web`, then start the server with `WEB_DIST=apps/web/dist` to serve the UI from the same
-  origin. Put it behind HTTPS (reverse proxy), set `COOKIE_SECURE=true`, and set `WEB_ORIGIN` to the public
-  origin. Adapters then use `https://…`.
+The quickest way to let teammates on other networks in is an HTTPS tunnel or reverse proxy in front of
+your machine:
+
+```bash
+npm run build:web
+```
+
+```bash
+npm run serve:public -- https://<your-public-address>
+```
+
+`serve:public` serves the built UI from the same origin and turns on secure cookies, **invite-only
+sign-up** (`SIGNUP_MODE=invite`: accounts can only be created with a project invite code) and a per-IP
+sign-in/sign-up rate limit (`AUTH_RATE_LIMIT`, default 20 per minute). On an invite-only server, create
+the first (owner) account on the server machine; a random password is printed once:
+
+```bash
+npm run create-user -- <username> "<Display Name>"
+```
+
+To run it yourself instead: `npm run build:web`, then start the server with `WEB_DIST=apps/web/dist`,
+put it behind HTTPS, and set `COOKIE_SECURE=true`, `SIGNUP_MODE=invite` and `WEB_ORIGIN` to the public
+origin. Adapters then use `https://…`.
+
+Limits:
+
 - One server process per database: live adapter connections and presence are kept in memory.
 - The server runs TypeScript through `tsx` (no separate build step).
-- This is an MVP. It is not production-hardened (no rate limiting, no email-based invites or password
-  reset, no audit export).
+- Not production-hardened: no password reset, no email invites, no member removal, no audit export, and
+  only the auth endpoints are rate-limited.
 
 ## Layout
 
@@ -280,7 +317,21 @@ packages/protocol   zod schemas + types shared by everything (REST, sockets, ada
 packages/adapter    local adapter: CLI, runner, Claude Code + Codex drivers, git, path checks, redaction, journal
 apps/server         Fastify + Socket.IO + Drizzle/Postgres; services; SQL migrations in apps/server/drizzle
 apps/web            React + Vite workspace UI
-scripts             dev seed, real-provider smoke test
+scripts             dev seed, create-user, serve:public, real-provider smoke/task/deny checks, approvals demo
+docs/images         screenshots used in this README
 ```
 
-Planning and status: [PLAN.md](PLAN.md), [TASKS.md](TASKS.md), [PROGRESS.md](PROGRESS.md).
+Development notes: [PLAN.md](PLAN.md) (original plan), [TASKS.md](TASKS.md) (backlog),
+[PROGRESS.md](PROGRESS.md) (what was and wasn't verified, and how).
+
+## Security
+
+Please report vulnerabilities privately, not in a public issue. See [SECURITY.md](SECURITY.md).
+
+## License
+
+Source-available, all rights reserved; see [LICENSE](LICENSE). You're welcome to read the code and run it
+locally to try it out. No open-source license has been chosen yet; for any other use, please open an issue
+and ask.
+
+Built by [Aarush Shetty](https://github.com/AarushShetty346), with a lot of help from Claude Code.

@@ -30,8 +30,10 @@ Status: `[x]` done and verified, `[!]` done with a stated verification gap, `[ ]
 - [x] P2.4 Conflict detection: overlapping uncommitted files, stale base commit, behind upstream
 - [x] P2.5 Activity history (task history, run events) and project search
 - [!] P2.6 Human-in-the-loop approvals routed into the room — Claude Code, opt-in (`approvals: true`);
-  tested with simulations, real permission prompt not yet observed (CLI not logged in). Codex: not supported.
+  tested with simulations, real permission prompt not yet observed. Codex: not supported.
+- [x] P2.7 Invite-only sign-up, per-IP sign-in/sign-up rate limit, `create-user`, `serve:public` for HTTPS tunnels
+- [x] P2.8 Markdown rendering in chat messages (safe subset, no raw HTML)
 
 ## Not planned for the MVP
 
-- Rate limiting, member removal, password reset, horizontal scaling
+- Rate limiting beyond auth, member removal, password reset, horizontal scaling
