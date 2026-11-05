@@ -1,6 +1,6 @@
 # RelayRoom — Progress
 
-Last updated: 2026-10-15. Work happens on `feat/mvp` and is merged into `main` (the default branch) once tests pass.
+Last updated: 2026-11-05. Work happens on `feat/mvp` and is merged into `main` (the default branch) once tests pass.
 
 ## State
 
@@ -12,6 +12,15 @@ Human-in-the-loop approvals (Claude Code, opt-in per adapter) were added on 2026
 `approvals` table + migration `0001_approvals`, server service and routes, adapter MCP permission-prompt
 bridge with a local cap, and an Approve/Deny card on the run. See "Approvals" below for what was and
 wasn't verified.
+
+Later on 2026-10-15, for letting people outside this machine in: invite-only sign-up (`SIGNUP_MODE=invite`),
+a per-IP sign-in/sign-up rate limit (`AUTH_RATE_LIMIT`), `npm run create-user` for the first account, and
+`npm run serve:public` to run behind an HTTPS tunnel. All covered by tests.
+
+2026-10-31: the task dialog no longer jumps back to the top when the room updates (its focus effect re-ran
+on every render; checked in a real browser before and after), and chat messages now render a safe Markdown
+subset, since agents reply in Markdown (render tests added). A 1-minute demo of a real run is at
+https://youtu.be/BA5JB0wk3IE.
 
 ## Verified on this machine
 
@@ -50,10 +59,10 @@ wasn't verified.
   and changed nothing. The adapter now detects this at startup without a model call, caps itself to
   read-only, and reports `edit: false`; the room refuses edit work for that agent up front.
 - Note for this machine: the Claude desktop app is a Store (MSIX) app, so its bundled CLI is at
-  `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\<version>\…\claude.exe`
+  `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\claude-code\<version>\…\claude.exe`
   from a normal terminal; the `%APPDATA%\Claude\…` path only exists inside the app's sandbox.
 
-- Full test suite: **103 tests pass** on in-process PGlite. The earlier 75
+- Full test suite: **114 tests pass** on in-process PGlite (as of 2026-10-31). The earlier 75
   also passed on PostgreSQL 16 (Docker), with the concurrency-sensitive files passing 3 consecutive runs;
   the approvals tests were run on PGlite only.
 - Typecheck (`strict`, `noUncheckedIndexedAccess`) passes for all packages and scripts; production web build
@@ -117,9 +126,9 @@ Not verified:
    constructed fixtures. Needs a Mac/Linux machine, or Codex's Windows sandbox once it ships.
 2. Claude Code's human-in-the-loop approval prompt (`--permission-prompt-tool`) has still not been
    observed calling the adapter for real (see "Approvals" above).
-4. Two humans on separate networks over HTTPS/WSS: designed for (outbound adapter connections, secure
+3. Two humans on separate networks over HTTPS/WSS: designed for (outbound adapter connections, secure
    cookies, configurable origins) but only tested on localhost.
-5. Rendering of partial token-by-token output: not implemented. Progress is forwarded per event (assistant
+4. Rendering of partial token-by-token output: not implemented. Progress is forwarded per event (assistant
    text block, tool use, command), which is what both providers' default JSON streams give.
 
 ## Design decisions worth knowing
@@ -138,7 +147,7 @@ Not verified:
 1. Log in to the provider CLIs and run the smoke tests and self-tests (see gap 1).
 2. Log in to Claude Code and observe a real permission prompt reaching the room (Approvals gap 1); then
    consider a Codex app-server driver for Codex approvals.
-3. Rate limiting on auth and message endpoints; member removal; invite links (not only codes).
+3. Rate limiting on message endpoints (auth is done); member removal; invite links (not only codes).
 4. Horizontal scaling: move adapter presence and fan-out to Postgres LISTEN/NOTIFY or Redis.
 5. Agent-to-agent handoffs without a human click (currently a human transfers the task; the receiving
    agent gets the prior handoff, decisions and expected commit).
@@ -154,3 +163,5 @@ Not verified:
 6. Tests on PGlite and Postgres; smoke script; docs.
 7. Human-in-the-loop approvals for Claude Code (protocol, server, adapter MCP bridge, UI, tests, local UI
    demo `npm run demo:approvals`); Codex app-server approval protocol inspected and left unsupported.
+8. Invite-only sign-up, auth rate limits, `create-user`, `serve:public`.
+9. (2026-10-31) Task dialog scroll fix; Markdown in chat messages; demo video recorded from a real run.
