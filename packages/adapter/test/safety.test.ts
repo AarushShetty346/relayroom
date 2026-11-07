@@ -5,6 +5,7 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
+import { loadAdapterConfig } from "../src/config.js";
 import { checkBase, collectGitInfo, diffSince, parseStatus } from "../src/git.js";
 import { displayPath, PathError, resolveInside, validateProjectDir } from "../src/paths.js";
 import { Redactor } from "../src/redact.js";
@@ -82,6 +83,24 @@ describe("repository path validation", () => {
     const root = tmp();
     expect(displayPath(root, path.join(root, "src", "a.ts"))).toBe("src/a.ts");
     expect(displayPath(root, path.join(path.dirname(root), "elsewhere", "x.ts"))).toBe("[outside project]/x.ts");
+  });
+});
+
+describe("adapter config file", () => {
+  it("resolves a relative --config from where npm was run, and paths inside it from the config's folder", () => {
+    const home = tmp();
+    const work = tmp();
+    mkdirSync(path.join(home, "cfg"));
+    writeFileSync(path.join(home, "cfg", "agent.token"), "rr_agent_test-token\n");
+    writeFileSync(
+      path.join(home, "cfg", "a.json"),
+      JSON.stringify({ serverUrl: "https://room.example", projectDir: work, provider: "claude-code", tokenFile: "agent.token" }),
+    );
+    // `npm run adapter` changes the working directory to packages/adapter but keeps INIT_CWD.
+    const cfg = loadAdapterConfig(path.join("cfg", "a.json"), { INIT_CWD: home });
+    expect(cfg.token).toBe("rr_agent_test-token");
+    expect(cfg.projectDir).toBe(work);
+    expect(() => loadAdapterConfig(path.join("cfg", "a.json"), { INIT_CWD: work })).toThrow(/Cannot read config/);
   });
 });
 

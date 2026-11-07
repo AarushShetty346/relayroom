@@ -59,6 +59,8 @@ function isLoopback(host: string): boolean {
 }
 
 export function loadAdapterConfig(file: string, env: NodeJS.ProcessEnv = process.env): AdapterConfig {
+  // `npm run adapter` runs inside packages/adapter; a relative --config means where the user typed it.
+  file = path.resolve(env.INIT_CWD ?? process.cwd(), file);
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(file, "utf8"));
@@ -70,7 +72,7 @@ export function loadAdapterConfig(file: string, env: NodeJS.ProcessEnv = process
     throw new ConfigError(`Invalid config: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
   }
   const c = parsed.data;
-  const base = path.dirname(path.resolve(file));
+  const base = path.dirname(file);
   const url = new URL(c.serverUrl);
   if (url.protocol !== "https:" && !(url.protocol === "http:" && isLoopback(url.hostname))) {
     throw new ConfigError("serverUrl must use https:// (plain http is only allowed for localhost)");
